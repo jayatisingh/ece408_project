@@ -30,13 +30,13 @@ void forward(mshadow::Tensor<cpu, 4, DType> &y, const mshadow::Tensor<cpu, 4, DT
       		for (int w = 0; w < W_out; w++) {
         		y[b][m][h][w] = 0;
         		for (int c = 0;  c < C; c++) {
-          	  for (int p = 0; p < K; p++) {
-                for (int q = 0; q < K; q++) {
-          				y[b][m][h][w] += x[b][c][h + p][w + q] * k[m][c][p][q];
-                }
-              }
-            }
-          }
+          	  		for (int p = 0; p < K; p++) {
+                			for (int q = 0; q < K; q++) {
+          					y[b][m][h][w] += x[b][c][h + p][w + q] * k[m][c][p][q];
+                			}
+              			}
+            		}
+          	}
         }
       }
     }
