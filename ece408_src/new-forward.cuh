@@ -3,8 +3,7 @@
 #define MXNET_OPERATOR_NEW_FORWARD_CUH_
 
 #include <mxnet/base.h>
-
-
+#define TILE_WIDTH 16
 namespace mxnet
 {
 namespace op
@@ -21,24 +20,22 @@ __global__ void forward_kernel(float *y,  //output
                                const int K)
 {
 
-	
-        #define TILE_WIDTH 16.0
+        const int H_out = H - K + 1;
+        const int W_out = W - K + 1;
+	const int W_grid = (W_out+TILE_WIDTH-1)/TILE_WIDTH;
+
         #define y4d(i3, i2, i1, i0) y[(i3) * (M * H_out * W_out) + (i2) * (H_out * W_out) + (i1) * (W_out) + i0]
         #define x4d(i3, i2, i1, i0) x[(i3) * (C * H * W) + (i2) * (H * W) + (i1) * (W) + i0]
         #define w4d(i3, i2, i1, i0) w[(i3) * (C * K * K) + (i2) * (K * K) + (i1) * (K) + i0]
-    
-        const int H_out = H - K + 1;
-        const int W_out = W - K + 1;
-	int W_grid = ceil(W_out/TILE_WIDTH);
-
-	int n = blockIdx.z; 
-  	int m = blockIdx.y; 
-  	int x_h = blockIdx.x / W_grid + threadIdx.y;
-  	int x_w = blockIdx.x % W_grid + threadIdx.x;
+	
+	const int n = blockIdx.z; 
+  	const int m = blockIdx.y; 
+  	const int x_h = (blockIdx.x / W_grid)*TILE_WIDTH + threadIdx.y;
+  	const int x_w = (blockIdx.x % W_grid)*TILE_WIDTH + threadIdx.x;
   
   
   	int c,p,q;
-  	if((x_h<H_out) && (x_w<W_out) && n<B){
+  	if((x_h<H_out) && (x_w<W_out)){
       		float acc = 0;
       		y4d(n, m, x_h, x_w) = 0;
       		for(c = 0; c<C; c++){
@@ -54,7 +51,7 @@ __global__ void forward_kernel(float *y,  //output
 
 	#undef y4d
 	#undef x4d
-	#undef k4d
+	#undef w4d
 }
 
 /* 
@@ -68,8 +65,6 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
                          const mshadow::Tensor<gpu, 4, float> &w)
 {
  
-    // Use mxnet's CHECK_EQ to do assertions.
-    // Remove this assertion when you do your implementation!
     // CHECK_EQ(0, 1) << "Remove this line and replace with your implementation";
 
     // Extract the tensor dimensions into B,M,C,H,W,K
@@ -85,8 +80,8 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
     // Set the kernel dimensions
     const int H_out = H - K + 1;
     const int W_out = W - K + 1;
-    const int W_grid = ceil(W_out / TILE_WIDTH);
-    const int H_grid = ceil(H_out / TILE_WIDTH);
+    const int W_grid = (W_out+TILE_WIDTH-1)/TILE_WIDTH;
+    const int H_grid = (H_out+TILE_WIDTH-1)/TILE_WIDTH;
     
     dim3 gridDim(W_grid*H_grid, M, B);
     dim3 blockDim(TILE_WIDTH, TILE_WIDTH, 1);
@@ -95,9 +90,9 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
     forward_kernel<<<gridDim, blockDim, 0>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K);
 
     // Use MSHADOW_CUDA_CALL to check for CUDA runtime errors.
-    // MSHADOW_CUDA_CALL(cudaDeviceSynchronize());
+    MSHADOW_CUDA_CALL(cudaDeviceSynchronize());
 
-  	return;
+    return;
 }
 
 /*  
